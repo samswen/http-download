@@ -4,7 +4,7 @@ const axios = require('axios');
 const https = require('https');
 const { createWriteStream } = require('fs');
 
-function http_download(url, local_file_pathname) {
+function http_download(url, local_file_pathname, options = {timeout: 60000}) {
     return new Promise((resolve) => {
         axios({
             url: url,
@@ -12,25 +12,27 @@ function http_download(url, local_file_pathname) {
             headers: { Accept: '*/*' },
             responseType: 'stream',
             httpsAgent: new https.Agent({rejectUnauthorized: false}),
-            timeout: 6000
+            ...options
         }).then(response => {
+            const status = response.status;
+            const content_type = response.headers['content-type'];
             const writer = createWriteStream(local_file_pathname);
             response.data.pipe(writer);
             writer.on('finish', () => { 
-                resolve(true); 
+                resolve({ok: true, status, content_type}); 
             });
             writer.on('error', () => {
-                resolve('failed to stream to file for http_download: ' + url);
+                resolve({ok: false, status, content_type});
             });
         }).catch(err => {
-            console.error(err.message + ' for ' + url);
-            if (err.response && err.response.data) {
-                console.error(err.response.headers);
-                //console.error(err.response.data);
-            } else if (err.request) {
-                console.error(err.request);
+            const message = err.message;
+            if (err.response) {
+                const status = err.response.status;
+                const data = err.response.data;
+                resolve({ok: false, status, message});
+            } else {
+                resolve(false);
             }
-            resolve(err.message);
         });
     });
 }
